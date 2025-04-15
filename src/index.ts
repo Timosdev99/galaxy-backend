@@ -17,7 +17,7 @@ app.use(express.json())
 
 const whitelist = [
   'http://localhost:3001',  
-  'https://galaxy-gilt-iota.vercel.app/'
+  'https://galaxy-gilt-iota.vercel.app'
 ];
 
 const corsOptions = {
