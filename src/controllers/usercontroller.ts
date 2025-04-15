@@ -197,3 +197,35 @@ export const allUser = async (req: Request, res: Response) => {
         });
     }
 };
+
+export const logout = (req: Request, res: Response) => {
+    try {
+        
+        res.clearCookie('token', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict"
+        });
+        
+         res.status(200).json({
+            status: "success",
+            message: "Logout successful"
+        });
+        return
+    } catch (error) {
+        console.error("Logout error:", error);
+       res.status(500).json({
+            status: "error",
+            message: "An error occurred during logout"
+        });
+        return 
+    }
+};
+
+export const validateToken = (req: Request, res:Response) => {
+              
+    res.status(200).json({
+        message: "token is valid",
+    });
+
+}
