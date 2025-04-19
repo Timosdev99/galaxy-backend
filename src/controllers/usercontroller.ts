@@ -33,7 +33,8 @@ export const SignUp = async (req: Request, res: Response) => {
 
  res.status(201).json({
       message: "Account created successfully",
-      user: { id: user.id, name: user.name, email: user.email, role: user.role }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      token: token
     });
     return
   } catch (error) {
@@ -91,7 +92,8 @@ export const login = async (req: Request, res: Response) => {
     res.status(200).json({
       status: "success",
       message: "Login successful",
-      user: { id: user.id, email: user.email, role: user.role }
+      user: { id: user.id, email: user.email, role: user.role },
+      token: token
     });
     return
   } catch (error) {

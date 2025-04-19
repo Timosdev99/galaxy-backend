@@ -29,6 +29,7 @@ const corsOptions = {
     }
   },
   credentials: true,
+  exposedHeaders: ['Authorization']
 };
 
 
