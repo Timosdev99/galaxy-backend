@@ -69,8 +69,7 @@ export const createOrder = async (req: Request<{}, {}, CreateOrderRequest>, res:
   try {
     const {
       customerId,
-      username,
-      email,
+     
       marketplace,
       category,
       items,
@@ -107,8 +106,6 @@ export const createOrder = async (req: Request<{}, {}, CreateOrderRequest>, res:
     const order = new OrderModel({
       orderNumber: generateOrderNumber(),
       customerId,
-      username,
-      email,
       marketplace,
       category,
       status: "pending",
