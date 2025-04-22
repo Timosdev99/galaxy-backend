@@ -5,18 +5,22 @@ import userroute from "./route/userroute"
 import orderroute from "./route/orderroute"
 import { createServer } from "http"
 import cors from 'cors'
-
+import chatRoutes from "./route/chatroute";
+import setupSocketServer from "./services/socketsever";
 
 
 const PORT = process.env.PORT || 3000
 const app: Application = express()
 const httpServer = createServer(app)
+const io = setupSocketServer(httpServer);
+
 
 app.use(express.json())
 
 
 const whitelist = [
-  'http://localhost:3001',  
+  'http://localhost:3001',
+  'http://localhost:3002',  
   'https://galaxy-gilt-iota.vercel.app'
 ];
 
@@ -38,6 +42,7 @@ app.use(cors(corsOptions));
 
 app.use('/user/v1', userroute);
 app.use('/order/v1', orderroute)
+app.use("/chats/v1", chatRoutes);
 
 app.use('/', (req: any, res: any) => {
   res.status(200).json({

@@ -27,6 +27,7 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
+    "@types/nodemailer": "^6.4.17",
     "axios": "^1.7.9",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
@@ -43,6 +44,7 @@
     "mongoose": "^8.9.5",
     "mongoose-aggregate-paginate-v2": "^1.1.2",
     "mongoose-paginate-v2": "^1.9.0",
+    "nodemailer": "^6.10.1",
     "redis": "^4.7.0",
     "socket.io": "^4.8.1",
     "uuid": "^11.0.5"

@@ -35,6 +35,8 @@ interface ShippingDetails {
 interface IOrder {
   orderNumber: string;
   customerId: string;
+  username: string;
+  email: string;
   marketplace: "GalaxyService" | "studio43" | "NorthernEats";
   category: string;
   status: "pending" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
@@ -102,7 +104,18 @@ const OrderSchema = new Schema<OrderDocument>(
       unique: true,
       index: true
     },
+
     customerId: {
+      type: String,
+      required: true,
+      index: true
+    },
+    username: {
+      type: String,
+      required: true,
+      index: true
+    },
+    email: {
       type: String,
       required: true,
       index: true

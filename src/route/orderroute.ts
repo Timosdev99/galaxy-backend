@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import * as OrderController from '../controllers/ordercontroller';
-import { createOrder, getAllOrders, getOrders, getOrderById, getMarketplaceOrders, updateOrder, confirmPayment, getOrderAnalytics } from '../controllers/ordercontroller';
+import { createOrder, getAllOrders, getOrders, getOrderById, getMarketplaceOrders, updateOrder, confirmPayment, getOrderAnalytics, getOrdersByCustomerId } from '../controllers/ordercontroller';
 import { Admin } from '../middlewares/rbac';
 import { authToken } from '../middlewares/auth';
 
@@ -9,8 +9,9 @@ const router = Router();
 
 
 router.post('/orders', authToken, createOrder);
-router.get('/orders',  getOrders);
+router.get('/orders',   getOrders);
 router.get('/orders/all', authToken, Admin, getAllOrders);
+router.get('/orders/customer/:customerId', authToken, getOrdersByCustomerId);
 router.get('/orders/:id', authToken,  getOrderById);
 router.get('/orders/marketplace/:marketplace', authToken, Admin, getMarketplaceOrders);
 router.patch('/orders/update', authToken, Admin, updateOrder);

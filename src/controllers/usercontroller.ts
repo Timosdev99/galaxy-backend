@@ -3,6 +3,8 @@ import express, { Request, Response } from "express";
 import { usermodel } from "../models/user";
 import { sign } from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import sendmail from "../utils/mailer";
+import { SendMailOptions } from "nodemailer";
 
 const generateToken = (userId: string) => {
   const secretKey = process.env.SECRET_KEY as string;
@@ -30,6 +32,33 @@ export const SignUp = async (req: Request, res: Response) => {
     const token = generateToken(user.id);
     
     res.setHeader("Authorization", `Bearer ${token}`);
+
+
+    const mailOptions = (to: string): SendMailOptions => ({
+      from: `"Ghost Market 👻" <${process.env.EMAIL_USER_NAME}>`,
+      to,
+      subject: "Welcome to Ghost Market 👻",
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
+          <h2 style="color: #222;">Welcome to Ghost Market 👻</h2>
+          <p>Hi there,</p>
+          <p>Thank you for signing up to <strong>Ghost Market</strong> — your new go-to destination for exclusive digital assets, collectibles, and unique market experiences.</p>
+          <p>We’re thrilled to have you join our growing community. Here’s what you can do next:</p>
+          <ul>
+            <li>🛒 Explore unique listings and rare finds</li>
+            <li>💼 Manage your collection and profile</li>
+            <li>⚡ Stay tuned for upcoming auctions and marketplace updates</li>
+          </ul>
+          <p>If you ever need help, questions, or suggestions — we’re just a message away.</p>
+          <p style="margin-top: 30px;">Welcome aboard, and happy trading!</p>
+          <p>The <strong>Ghost Market</strong> Team 👻</p>
+          <hr style="margin: 40px 0;" />
+          <small style="color: #888;">You received this email because you signed up for an account at Ghost Market.</small>
+        </div>
+      `
+    });
+
+  await  sendmail(mailOptions(user?.email))
 
  res.status(201).json({
       message: "Account created successfully",

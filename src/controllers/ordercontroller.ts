@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import OrderModel, { OrderDocument } from "../models/order";
 import mongoose from "mongoose";
-
+import sendmail from "../utils/mailer";
+import { SendMailOptions } from "nodemailer";
 
 interface OrderItem {
   productId: string;
@@ -13,6 +14,8 @@ interface OrderItem {
 
 interface CreateOrderRequest {
   customerId: string;
+  username: string;
+  email: string;
   marketplace: "GalaxyService" | "studio43" | "NorthernEats";
   category: string;
   items: OrderItem[];
@@ -66,6 +69,8 @@ export const createOrder = async (req: Request<{}, {}, CreateOrderRequest>, res:
   try {
     const {
       customerId,
+      username,
+      email,
       marketplace,
       category,
       items,
@@ -102,6 +107,8 @@ export const createOrder = async (req: Request<{}, {}, CreateOrderRequest>, res:
     const order = new OrderModel({
       orderNumber: generateOrderNumber(),
       customerId,
+      username,
+      email,
       marketplace,
       category,
       status: "pending",
@@ -125,6 +132,27 @@ export const createOrder = async (req: Request<{}, {}, CreateOrderRequest>, res:
 
     await order.save();
     
+    const orderConfirmationMail = (to: string, orderNumber: string, finalAmount: number): SendMailOptions => ({
+      from: `"Ghost Market 👻" <${process.env.EMAIL_USER_NAME}>`,
+      to,
+      subject: `🎉 Your Ghost Market Order #${orderNumber} is Confirmed!`,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
+          <h2 style="color: #222;">Thank you for your order! 👻</h2>
+          <p>Hello!</p>
+          <p>Your order <strong>#${orderNumber}</strong> has been successfully placed on <strong>Ghost Market</strong>.</p>
+          <p><strong>Total Amount:</strong> $${finalAmount}</p>
+          <p>We’re currently processing your order and will notify you once it’s ready for shipping.</p>
+          <p>Thank you for shopping with us!</p>
+          <p style="margin-top: 30px;">– The Ghost Market Team 👻</p>
+          <hr style="margin: 40px 0;" />
+          <small style="color: #888;">You received this email because you placed an order on Ghost Market.</small>
+        </div>
+      `
+    });
+
+    await sendmail(orderConfirmationMail(req.user.email, order.orderNumber, order.finalAmount));
+
     
  res.status(201).json({
       message: "Order successfully created",
@@ -313,7 +341,7 @@ export const confirmPayment = async (req: Request, res: Response) => {
       if (!orderId || !adminId) {
          res.status(400).json({ message: "Order ID and Admin ID are required" });
          return
-      }
+      } 
       
       const order = await OrderModel.findById(orderId);
       
@@ -370,7 +398,7 @@ export const getOrderById = async (req: Request, res: Response) => {
     
     if (!id) {
      res.status(404).json({ message: "Order ID is required" });
-     return 
+     return  
     }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -580,4 +608,33 @@ export const getMarketplaceOrders = async (req: Request, res: Response) => {
 };
 
 
+export const getOrdersByCustomerId = async (req: Request, res: Response) => {
+  try {
+    const { customerId } = req.params;
+    
+    if (!customerId) {
+      res.status(400).json({ message: "Customer ID is required" });
+      return;
+    }
 
+    if (!mongoose.Types.ObjectId.isValid(customerId)) {
+      res.status(400).json({ message: "Invalid customer ID format" });
+      return;
+    }
+
+    const orders = await OrderModel.find({ customerId });
+    
+    if (!orders || orders.length === 0) {
+      res.status(404).json({ message: "No orders found for this customer" });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Orders successfully retrieved",
+      orders
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to get orders by customer ID" });
+  }
+};
