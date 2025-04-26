@@ -418,74 +418,11 @@ export const getOrderById = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
    res.status(500).json({ message: "Failed to get order by id" });
-   return 
+   
   }
 };
 
-export const getOrderAnalytics = async (req: Request, res: Response) => {
-  try {
-    // Overall metrics
-    const totalOrders = await OrderModel.countDocuments();
-    const completedOrders = await OrderModel.countDocuments({ status: 'delivered' });
-    const cancelledOrders = await OrderModel.countDocuments({ status: 'cancelled' });
-    const refundedOrders = await OrderModel.countDocuments({ status: 'refunded' });
 
-    // Total revenue from completed orders
-    const revenueResult = await OrderModel.aggregate([
-      { $match: { status: 'delivered' } },
-      { $group: { _id: null, totalRevenue: { $sum: "$finalAmount" } } }
-    ]);
-    const totalRevenue = revenueResult.length > 0 ? revenueResult[0].totalRevenue : 0;
-
-    // Orders by status
-    const ordersByStatus = await OrderModel.aggregate([
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]);
-
-    // Orders by payment method
-    const ordersByPaymentMethod = await OrderModel.aggregate([
-      { $group: { _id: '$payment.method', count: { $sum: 1 } } }
-    ]);
-    
-    // Orders by marketplace
-    const ordersByMarketplace = await OrderModel.aggregate([
-      { $group: { _id: '$marketplace', count: { $sum: 1 } } }
-    ]);
-    
-    // Revenue by marketplace
-    const revenueByMarketplace = await OrderModel.aggregate([
-      { $match: { status: 'delivered' } },
-      { $group: { _id: '$marketplace', revenue: { $sum: "$finalAmount" } } }
-    ]);
-
-     res.status(200).json({
-      analytics: {
-        totalOrders,
-        completedOrders,
-        cancelledOrders,
-        refundedOrders,
-        totalRevenue,
-        ordersByStatus: Object.fromEntries(
-          ordersByStatus.map(item => [item._id, item.count])
-        ),
-        ordersByPaymentMethod: Object.fromEntries(
-          ordersByPaymentMethod.map(item => [item._id, item.count])
-        ),
-        ordersByMarketplace: Object.fromEntries(
-          ordersByMarketplace.map(item => [item._id, item.count])
-        ),
-        revenueByMarketplace: Object.fromEntries(
-          revenueByMarketplace.map(item => [item._id, item.revenue])
-        )
-      }
-    });
-    return
-  } catch (error) {
-    console.error(error);
-     res.status(500).json({ message: "Failed to fetch order analytics" });
-     return
-  }
-};
 
 export const deleteOrder = async (req: Request, res: Response) => {
   try {
@@ -601,6 +538,72 @@ export const getMarketplaceOrders = async (req: Request, res: Response) => {
     console.error(error);
     res.status(500).json({ message: "Failed to fetch marketplace orders" });
     return
+  }
+};
+
+
+export const getOrderAnalytics = async (req: Request, res: Response) => {
+  try {
+    // Overall metrics
+    const totalOrders = await OrderModel.countDocuments();
+    const completedOrders = await OrderModel.countDocuments({ status: 'delivered' });
+    const cancelledOrders = await OrderModel.countDocuments({ status: 'cancelled' });
+    const refundedOrders = await OrderModel.countDocuments({ status: 'refunded' });
+
+    // Total revenue from completed orders
+    const revenueResult = await OrderModel.aggregate([
+      { $match: { status: 'delivered' } },
+      { $group: { _id: null, totalRevenue: { $sum: "$finalAmount" } } }
+    ]);
+    const totalRevenue = revenueResult.length > 0 ? revenueResult[0].totalRevenue : 0;
+
+    // Orders by status
+    const ordersByStatus = await OrderModel.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
+    // Orders by payment method
+    const ordersByPaymentMethod = await OrderModel.aggregate([
+      { $group: { _id: '$payment.method', count: { $sum: 1 } } }
+    ]);
+    
+    // Orders by marketplace
+    const ordersByMarketplace = await OrderModel.aggregate([
+      { $group: { _id: '$marketplace', count: { $sum: 1 } } }
+    ]);
+    
+    // Revenue by marketplace
+    const revenueByMarketplace = await OrderModel.aggregate([
+      { $match: { status: 'delivered' } },
+      { $group: { _id: '$marketplace', revenue: { $sum: "$finalAmount" } } }
+    ]);
+
+     res.status(200).json({
+      analytics: {
+        totalOrders,
+        completedOrders,
+        cancelledOrders,
+        refundedOrders,
+        totalRevenue,
+        ordersByStatus: Object.fromEntries(
+          ordersByStatus.map(item => [item._id, item.count])
+        ),
+        ordersByPaymentMethod: Object.fromEntries(
+          ordersByPaymentMethod.map(item => [item._id, item.count])
+        ),
+        ordersByMarketplace: Object.fromEntries(
+          ordersByMarketplace.map(item => [item._id, item.count])
+        ),
+        revenueByMarketplace: Object.fromEntries(
+          revenueByMarketplace.map(item => [item._id, item.revenue])
+        )
+      }
+    });
+    return
+  } catch (error) {
+    console.error(error);
+     res.status(500).json({ message: "Failed to fetch order analytics" });
+     return
   }
 };
 

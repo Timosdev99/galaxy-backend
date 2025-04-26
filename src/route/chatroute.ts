@@ -1,6 +1,3 @@
-
-
-// src/routes/chat.ts
 import express from "express";
 import { 
   startChat, 
