@@ -5,7 +5,6 @@ import sendmail from "../utils/mailer";
 import { SendMailOptions } from "nodemailer";
 
 interface OrderItem {
-  productId: string;
   name: string;
   price: number;
   quantity: number;
@@ -69,7 +68,6 @@ export const createOrder = async (req: Request<{}, {}, CreateOrderRequest>, res:
   try {
     const {
       customerId,
-     
       marketplace,
       category,
       items,
@@ -91,9 +89,9 @@ export const createOrder = async (req: Request<{}, {}, CreateOrderRequest>, res:
 
     // validating if the item contains required feild 
     for (const item of items) {
-      if (!item.productId || !item.name || !item.price || !item.quantity) {
+      if (!item.name || !item.price || !item.quantity) {
         res.status(400).json({
-          message: "Each item must have productId, name, price, and quantity"
+          message: "Each item must have  name, price, and quantity"
         });
         return
       }
