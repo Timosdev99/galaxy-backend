@@ -23,7 +23,8 @@ const whitelist = [
   'http://localhost:3002',  
   'https://galaxy-gilt-iota.vercel.app',
   'https://ghostmarket.net',
-  'https://www.ghostmarket.net'
+  'https://www.ghostmarket.net',
+  'https://galaxy-admin-two.vercel.app/'
 ];
 
 const corsOptions = {
