@@ -331,10 +331,11 @@ export const updateOrder = async (req: Request<{}, {}, UpdateOrderRequest>, res:
 
 export const confirmPayment = async (req: Request, res: Response) => {
     try {
-      const { orderId, adminId, transactionId } = req.body;
+      const { orderId,  transactionId } = req.body;
+      const adminId = req.user?.id
       
-      if (!orderId || !adminId) {
-         res.status(400).json({ message: "Order ID and Admin ID are required" });
+      if (!orderId) {
+         res.status(400).json({ message: "Order ID aare required" });
          return
       } 
       
