@@ -5,66 +5,154 @@ import { sign } from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import sendmail from "../utils/mailer";
 import { SendMailOptions } from "nodemailer";
+import crypto from "crypto"
+import { any } from "joi";
 
 const generateToken = (userId: string) => {
   const secretKey = process.env.SECRET_KEY as string;
   return sign({ id: userId }, secretKey, { expiresIn: "1d" });
 };
 
+function generate5DigitOTP(): string {
+  const buffer = crypto.randomBytes(3); 
+  const otp = Math.floor(parseInt(buffer.toString('hex'), 16) / 1677.7216) 
+    .toString()
+    .padStart(5, '0');
+  return otp;
+}
+
+
 export const SignUp = async (req: Request, res: Response) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, adminOtp } = req.body;
 
   try {
     if (!name || !email || !password) {
-       res.status(400).json({ message: "Name, email and password are required" });
-       return
+      res.status(400).json({ message: "Name, email and password are required" });
+      return
     }
 
     const existingUser = await usermodel.findOne({ email });
     if (existingUser) {
-      res.status(400).json({ message: "Email already in use" });
-      return
+       res.status(400).json({ message: "Email already in use" });
+       return
     }
 
+    
+    if (role === "admin") {
+      
+      if (adminOtp) {
+        
+        const storedOtp = await usermodel.findOne({ 
+          "otp.code": adminOtp,
+          "otp.expiresAt": { $gt: new Date() } 
+        });
+
+        if (!storedOtp) {
+         res.status(400).json({ message: "Invalid or expired OTP" });
+         return
+        }
+
+       
+        storedOtp.otp = {
+          code: null,
+          expiresAt: null
+        } as any;  
+        
+        await storedOtp.save();
+        
+        
+      } else {
+       
+        const otp = generate5DigitOTP();
+       
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 2);
+        
+        
+        const tempOtpHolder = new usermodel({
+          name: "Temporary OTP Holder",
+          email: `temp-${Date.now()}@ghostmarket.internal`,
+          password: "temporaryPassword" + Math.random(), 
+          role: "user", 
+          otp: {
+            code: otp,
+            expiresAt: expiresAt
+          }
+        });
+        
+        await tempOtpHolder.save();
+
+        
+        const adminEmail = "timothyisah4@gmail.com"; 
+        const mailOptions = {
+          from: `"Ghost Market 👻" <${process.env.EMAIL_USER_NAME}>`,
+          to: adminEmail,
+          subject: "Admin Account Creation Request",
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
+              <h2 style="color: #222;">Ghost Market Admin Verification</h2>
+              <p>Hello Admin,</p>
+              <p>Someone is trying to create an admin account with the following details:</p>
+              <p><strong>Name:</strong> ${name}</p>
+              <p><strong>Email:</strong> ${email}</p>
+              <p>To approve this request, please provide the following OTP to the user:</p>
+              <h3 style="background-color: #f0f0f0; padding: 10px; text-align: center;">${otp}</h3>
+              <p>This OTP will expire in 2 hours.</p>
+              <p>If you did not authorize this request, please ignore this email.</p>
+            </div>
+          `
+        };
+        
+        await sendmail(mailOptions);
+        
+       res.status(202).json({ 
+          message: "Admin creation requires verification. An OTP has been sent to the main administrator. Please provide this OTP to complete registration.",
+          requiresOtp: true
+        });
+        return
+      }
+    }
+
+  
     const user = new usermodel({ name, email, password, role });
     await user.save();
 
     const token = generateToken(user.id);
-    
     res.setHeader("Authorization", `Bearer ${token}`);
 
-
-    const mailOptions = (to: string): SendMailOptions => ({
+    
+    const welcomeMailOptions = {
       from: `"Ghost Market 👻" <${process.env.EMAIL_USER_NAME}>`,
-      to,
+      to: user.email,
       subject: "Welcome to Ghost Market 👻",
       html: `
         <div style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
           <h2 style="color: #222;">Welcome to Ghost Market 👻</h2>
           <p>Hi there,</p>
           <p>Thank you for signing up to <strong>Ghost Market</strong> — your new go-to destination for exclusive digital assets, collectibles, and unique market experiences.</p>
-          <p>We’re thrilled to have you join our growing community. Here’s what you can do next:</p>
+          <p>We're thrilled to have you join our growing community. Here's what you can do next:</p>
           <ul>
             <li>🛒 Explore unique listings and rare finds</li>
             <li>💼 Manage your collection and profile</li>
             <li>⚡ Stay tuned for upcoming auctions and marketplace updates</li>
           </ul>
-          <p>If you ever need help, questions, or suggestions — we’re just a message away.</p>
+          <p>If you ever need help, questions, or suggestions — we're just a message away.</p>
           <p style="margin-top: 30px;">Welcome aboard, and happy trading!</p>
           <p>The <strong>Ghost Market</strong> Team 👻</p>
           <hr style="margin: 40px 0;" />
           <small style="color: #888;">You received this email because you signed up for an account at Ghost Market.</small>
         </div>
       `
-    });
+    };
 
-  await  sendmail(mailOptions(user?.email))
+    await sendmail(welcomeMailOptions);
 
- res.status(201).json({
+    res.status(201).json({
       message: "Account created successfully",
       user: { id: user.id, name: user.name, email: user.email, role: user.role }
     });
     return
+    
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Unable to create account" });
