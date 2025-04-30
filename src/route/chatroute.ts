@@ -13,12 +13,12 @@ import { authToken } from "../middlewares/auth";
 
 const router = express.Router();
 
-router.post("/start",authToken,   startChat);
-router.post("/reply", authToken, adminReply);
-router.get("/user", authToken, getUserChats);
-router.get("/admin", authToken, getAdminChats);
-router.get("/:chatId", authToken, getChatById);
-router.patch("/:chatId/close", authToken, closeChat);
-router.patch("/:chatId/reopen", authToken, reopenChat);
+router.post("/start", startChat);
+router.post("/reply", adminReply);
+router.get("/user",  getUserChats);
+router.get("/admin",  getAdminChats);
+router.get("/:chatId",  getChatById);
+router.patch("/:chatId/close",  closeChat);
+router.patch("/:chatId/reopen",  reopenChat);
 
 export default router;
