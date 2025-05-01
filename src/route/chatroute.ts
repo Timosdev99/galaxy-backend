@@ -1,30 +1,30 @@
 import express from "express";
 import { 
-  startChat, 
-  adminReply, 
-  getUserChats, 
+  getChatByOrder, 
+  sendMessage, 
+  getCustomerChats, 
   getAdminChats,
-  getChatById,
-  closeChat,
-  reopenChat,
-  getUnreadCounts
+  markMessagesAsRead, 
+  getAttachment
 } from "../controllers/chat";
 import { authToken } from "../middlewares/auth";
 
 const router = express.Router();
 
-// Message operations
-router.post("/start", authToken, startChat);
-router.post("/reply", authToken, adminReply);
 
-// Chat retrieval
-router.get("/user", authToken, getUserChats);
+router.get("/customer", authToken, getCustomerChats);
+
+
 router.get("/admin", authToken, getAdminChats);
-router.get("/unread", authToken, getUnreadCounts);
-router.get("/:chatId", authToken, getChatById);
 
-// Chat status management
-router.patch("/:chatId/close", authToken, closeChat);
-router.patch("/:chatId/reopen", authToken, reopenChat);
+
+router.get("/order/:orderId", authToken, getChatByOrder);
+router.post("/send", authToken, sendMessage);
+router.patch("/read/:orderId", authToken, markMessagesAsRead);
+router.get(
+  "/:orderId/messages/:messageId/attachments/:attachmentIndex", 
+  authToken, 
+  getAttachment
+);
 
 export default router;

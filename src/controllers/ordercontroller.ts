@@ -3,6 +3,7 @@ import OrderModel, { OrderDocument } from "../models/order";
 import mongoose from "mongoose";
 import sendmail from "../utils/mailer";
 import { SendMailOptions } from "nodemailer";
+import ChatModel from "../models/chat";
 
 interface OrderItem {
   name: string;
@@ -126,6 +127,30 @@ export const createOrder = async (req: Request<{}, {}, CreateOrderRequest>, res:
     });
 
     await order.save();
+
+    const chat = new ChatModel({
+      orderId: order.id.toString(),
+      customerId: customerId,
+      messages: [{
+        sender: "system",
+        content: `Chat started for order #${order.orderNumber}`,
+        timestamp: new Date(),
+        read: true
+      }]
+    });
+    
+    await chat.save();
+    
+    // Notify admin via socket.io if you're using it
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('new-chat', { 
+        orderId: order._id,
+        customerId: customerId,
+        orderNumber: order.orderNumber 
+      });
+    }
+    
     
     const orderConfirmationMail = (to: string, orderNumber: string, finalAmount: number): SendMailOptions => ({
       from: `"Ghost Market 👻" <${process.env.EMAIL_USER_NAME}>`,

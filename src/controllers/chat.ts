@@ -1,86 +1,212 @@
+
 import { Request, Response } from "express";
 import ChatModel from "../models/chat";
 import OrderModel from "../models/order";
-import mongoose from "mongoose";
-import { Server } from "socket.io";
+import { usermodel } from "../models/user";
+import multer from "multer";
 
-// start a new chat for an order 
-export const startChat = async (req: Request, res: Response) => {
+const storage = multer.memoryStorage()
+const upload = multer({storage})
+
+export const sendMessageWithAttachment = [
+  upload.array('attachments', 3), // Max 3 files
+  async (req: Request, res: Response) => {
+    try {
+      const { orderId, content } = req.body;
+      const files = req.files as Express.Multer.File[];
+      
+      // Validate inputs
+      if (!orderId) {
+        return res.status(400).json({ message: "Order ID is required" });
+      }
+
+      // Find or create chat
+      let chat = await ChatModel.findOne({ orderId });
+      if (!chat) {
+        chat = new ChatModel({
+          orderId,
+          customerId: (await OrderModel.findById(orderId))?.customerId,
+          messages: []
+        });
+      }
+
+      // Process attachments
+      const attachments = files?.map(file => ({
+        data: file.buffer,
+        contentType: file.mimetype,
+        filename: file.originalname,
+        size: file.size
+      }));
+
+      // Add message
+      chat.messages.push({
+        sender: req.user.role === "admin" ? "admin" : "user",
+        content,
+        timestamp: new Date(),
+        read: false,
+        attachments: attachments?.length ? attachments : undefined,
+        _id: undefined
+      });
+
+      await chat.save();
+
+      // Emit socket event
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`order-${orderId}`).emit('new-message', {
+          orderId,
+          sender: req.user.role === "admin" ? "admin" : "user",
+          content,
+          attachments: attachments?.map(a => ({
+            filename: a.filename,
+            contentType: a.contentType,
+            size: a.size
+          })),
+          timestamp: new Date()
+        });
+      }
+
+      res.status(200).json({
+        message: "Message sent successfully",
+        chat
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  }
+];
+
+// Add this helper to retrieve file data
+export const getAttachment = async (req: Request, res: Response) => {
   try {
-    const { orderId, message } = req.body;
-    const io: Server = req.app.get('io');
+    const { orderId, messageId, attachmentIndex } = req.params;
     
-    if (!orderId || !message) {
-      res.status(400).json({ message: "Order ID and message are required" });
+    const chat = await ChatModel.findOne({ orderId });
+    if (!chat) {
+     res.status(404).json({ message: "Chat not found" });
+     return
+    }
+
+    const message = chat.messages.find(m => m._id.toString() === messageId);
+    if (!message || !message.attachments || !message.attachments[Number(attachmentIndex)]) {
+      res.status(404).json({ message: "Attachment not found" });
+      return
+    }
+
+    const attachment = message.attachments[Number(attachmentIndex)];
+    
+    res.set('Content-Type', attachment.contentType);
+    res.set('Content-Disposition', `inline; filename="${attachment.filename}"`);
+    res.send(attachment.data);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to retrieve attachment" });
+  }
+};
+
+
+export const getChatByOrder = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    
+    if (!orderId) {
+      res.status(400).json({ message: "Order ID is required" });
       return;
     }
-    
-    // check if order exist and belong to user 
+
+    // Verify the user has access to this chat
     const order = await OrderModel.findById(orderId);
     if (!order) {
       res.status(404).json({ message: "Order not found" });
       return;
     }
-    
-    if (order.customerId != req.user._id) {
-      res.status(403).json({ message: "Unauthorized: This order doesn't belong to you" });
+
+    // Check if user is customer or admin
+    if ( order.customerId !== req.user.id) {
+      res.status(403).json({ message: "Unauthorized to access this chat" });
       return;
     }
+
+    const chat = await ChatModel.findOne({ orderId });
     
-    // checking if chat already exiist 
+    if (!chat) {
+      res.status(404).json({ message: "Chat not found for this order" });
+      return;
+    }
+
+    res.status(200).json({
+      chat,
+      order: {
+        orderNumber: order.orderNumber,
+        status: order.status
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to get chat" });
+  }
+};
+
+export const sendMessage = async (req: Request, res: Response) => {
+  try {
+    const { orderId, content } = req.body;
+    
+    if (!orderId || !content) {
+      res.status(400).json({ message: "Order ID and message content are required" });
+      return;
+    }
+
+    // Verify the user has access to this chat
+    const order = await OrderModel.findById(orderId);
+    if (!order) {
+      res.status(404).json({ message: "Order not found" });
+      return;
+    }
+
+    // Check if user is customer or admin
+    if ( order.customerId !== req.user.id) {
+      res.status(403).json({ message: "Unauthorized to send message in this chat" });
+      return;
+    }
+
+    // Find or create chat
     let chat = await ChatModel.findOne({ orderId });
-    
-    if (chat) {
-      // add message to existing chat
-      chat.messages.push({
-        senderId: req.user._id,
-        senderRole: 'user',
-        message,
-        timestamp: new Date(),
-        read: false
-      });
-      
-      chat.lastMessage = new Date();
-      chat.open = true;
-      
-      await chat.save();
-    } else {
-      // create new chat
+    if (!chat) {
       chat = new ChatModel({
         orderId,
-        customerId: req.user._id,
-        messages: [{
-          senderId: req.user._id,
-          senderRole: 'user',
-          message,
-          timestamp: new Date(),
-          read: false
-        }],
-        lastMessage: new Date(),
-        open: true
+        customerId: order.customerId,
+        messages: []
       });
-      
-      await chat.save();
     }
-    
-    // Emit socket event to notify admins of new message
-    io.to("admin-room").emit("new-chat-notification", {
-      chatId: chat._id,
-      orderId: chat.orderId,
-      message,
-      sender: {
-        id: req.user._id,
-        name: req.user.name || 'User',
-      },
-      timestamp: new Date()
+
+    // Assign admin to chat if it's an admin messaging first
+    if (req.user.role === "admin" && !chat.adminId) {
+      chat.adminId = req.user._id.toString();
+    }
+
+    // Add message
+    chat.messages.push({
+      sender: req.user.role === "admin" ? "admin" : "user",
+      content,
+      timestamp: new Date(),
+      read: false,
+      _id: undefined
     });
-    
-    // Join the chat room
-    const userSocketId = getUserSocketId(io, req.user._id);
-    if (userSocketId) {
-      io.sockets.sockets.get(userSocketId)?.join(`order-${orderId}`);
+
+    await chat.save();
+
+    // Emit socket event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`order-${orderId}`).emit('new-message', {
+        orderId,
+        sender: req.user.role === "admin" ? "admin" : "user",
+        content,
+        timestamp: new Date()
+      });
     }
-    
+
     res.status(200).json({
       message: "Message sent successfully",
       chat
@@ -91,345 +217,72 @@ export const startChat = async (req: Request, res: Response) => {
   }
 };
 
-// admin reply to chat 
-export const adminReply = async (req: Request, res: Response) => {
-  try {
-    // verify admin role 
-    if (req.user.role !== "admin") {
-      res.status(403).json({ message: "Unauthorized: Admin access required" });
-      return;
-    }
-    
-    const { chatId, message } = req.body;
-    const io: Server = req.app.get('io');
-    
-    if (!chatId || !message) {
-      res.status(400).json({ message: "Chat ID and message are required" });
-      return;
-    }
-    
-    const chat = await ChatModel.findById(chatId).populate('customerId', 'name');
-    
-    if (!chat) {
-      res.status(404).json({ message: "Chat not found" });
-      return;
-    }
-    
-    // add admin message
-    chat.messages.push({
-      senderId: req.user._id,
-      senderRole: 'admin',
-      message,
-      timestamp: new Date(),
-      read: false
-    });
-    
-    chat.lastMessage = new Date();
-    await chat.save();
-    
-    // Emit socket event to notify user of admin's reply
-    io.to(`user-${chat.customerId}`).emit("new-chat-notification", {
-      chatId: chat._id,
-      orderId: chat.orderId,
-      message,
-      sender: {
-        role: "admin",
-        name: "Admin"
-      },
-      timestamp: new Date()
-    });
-    
-    // Also emit to the specific chat room
-    io.to(`order-${chat.orderId}`).emit("new-message", {
-      chatId: chat._id,
-      message,
-      sender: {
-        id: req.user._id,
-        name: "Admin",
-        role: "admin"
-      },
-      timestamp: new Date()
-    });
-    
-    res.status(200).json({
-      message: "Reply sent successfully",
-      chat
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to send reply" });
-  }
-};
-
-// get all chats for a user
-export const getUserChats = async (req: Request, res: Response) => {
+export const getCustomerChats = async (req: Request, res: Response) => {
   try {
     const chats = await ChatModel.find({ customerId: req.user._id })
-      .sort({ lastMessage: -1 })
-      .populate('orderId', 'orderNumber');
-      
+      .sort({ updatedAt: -1 })
+      .populate('adminId', 'name email');
+
     res.status(200).json({
       chats
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Failed to fetch chats" });
+    res.status(500).json({ message: "Failed to get chats" });
   }
 };
 
-// get all chats for admin
 export const getAdminChats = async (req: Request, res: Response) => {
   try {
-    // verify admin role
     if (req.user.role !== "admin") {
-      res.status(403).json({ message: "Unauthorized: Admin access required" });
+      res.status(403).json({ message: "Unauthorized" });
       return;
     }
-    
-    const { open } = req.query;
-    const filter: any = {};
-    
-    if (open === 'true') filter.open = true;
-    else if (open === 'false') filter.open = false;
-    
-    const chats = await ChatModel.find(filter)
-      .sort({ lastMessage: -1 })
-      .populate('customerId', 'name email')
-      .populate('orderId', 'orderNumber');
-      
+
+    const chats = await ChatModel.find()
+      .sort({ updatedAt: -1 })
+      .populate('customerId', 'name email');
+
     res.status(200).json({
       chats
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Failed to fetch chats" });
+    res.status(500).json({ message: "Failed to get chats" });
   }
 };
 
-// get a specific chat by ID
-export const getChatById = async (req: Request, res: Response) => {
+export const markMessagesAsRead = async (req: Request, res: Response) => {
   try {
-    const { chatId } = req.params;
-    const io: Server = req.app.get('io');
+    const { orderId } = req.params;
     
-    const chat = await ChatModel.findById(chatId)
-      .populate('customerId', 'name email')
-      .populate('orderId');
-      
+    if (!orderId) {
+      res.status(400).json({ message: "Order ID is required" });
+      return;
+    }
+
+    const chat = await ChatModel.findOne({ orderId });
     if (!chat) {
       res.status(404).json({ message: "Chat not found" });
       return;
     }
-    
-    // Check if user is authorized to access this chat
-    if (req.user.role !== "admin" && !chat.customerId.equals(req.user._id)) {
-      res.status(403).json({ message: "Unauthorized: You don't have access to this chat" });
-      return;
-    }
-    
-    // Join chat room via socket
-    const userSocketId = getUserSocketId(io, req.user._id);
-    if (userSocketId) {
-      io.sockets.sockets.get(userSocketId)?.join(`order-${chat.orderId}`);
-    }
-    
-    // Mark all messages as read if user is the recipient
-    let markAsReadCount = 0;
-    if (req.user.role === "admin") {
-      const result = await ChatModel.updateOne(
-        { _id: chatId },
-        { $set: { "messages.$[elem].read": true } },
-        { arrayFilters: [{ "elem.senderRole": "user", "elem.read": false }] }
-      );
-      markAsReadCount = result.modifiedCount || 0;
-    } else {
-      const result = await ChatModel.updateOne(
-        { _id: chatId },
-        { $set: { "messages.$[elem].read": true } },
-        { arrayFilters: [{ "elem.senderRole": "admin", "elem.read": false }] }
-      );
-      markAsReadCount = result.modifiedCount || 0;
-    }
-    
-    // Notify about read messages if any were marked as read
-    if (markAsReadCount > 0) {
-      io.to(`order-${chat.orderId}`).emit("messages-read", {
-        chatId: chat._id,
-        readBy: req.user.role,
-        userId: req.user._id
-      });
-    }
-    
-    // Fetch updated chat
-    const updatedChat = await ChatModel.findById(chatId)
-      .populate('customerId', 'name email')
-      .populate('orderId');
-    
-    res.status(200).json({
-      chat: updatedChat
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to fetch chat" });
-  }
-};
 
-// Close a chat (Admin only)
-export const closeChat = async (req: Request, res: Response) => {
-  try {
-    // Verify admin role
-    if (req.user.role !== "admin") {
-      res.status(403).json({ message: "Unauthorized: Admin access required" });
-      return;
-    }
-    
-    const { chatId } = req.params;
-    const io: Server = req.app.get('io');
-    
-    const chat = await ChatModel.findByIdAndUpdate(
-      chatId,
-      { open: false },
-      { new: true }
-    ).populate('customerId', '_id');
-    
-    if (!chat) {
-      res.status(404).json({ message: "Chat not found" });
-      return;
-    }
-    
-    // Notify via socket that chat has been closed
-    io.to(`order-${chat.orderId}`).emit("chat-status-changed", {
-      chatId: chat._id,
-      orderId: chat.orderId,
-      status: "closed",
-      timestamp: new Date()
-    });
-    
-    // Also notify user specifically
-    io.to(`user-${chat.customerId}`).emit("chat-status-changed", {
-      chatId: chat._id,
-      orderId: chat.orderId,
-      status: "closed",
-      timestamp: new Date()
-    });
-    
-    res.status(200).json({
-      message: "Chat closed successfully",
-      chat
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to close chat" });
-  }
-};
-
-// Reopen a chat (Admin only)
-export const reopenChat = async (req: Request, res: Response) => {
-  try {
-    // Verify admin role
-    if (req.user.role !== "admin") {
-      res.status(403).json({ message: "Unauthorized: Admin access required" });
-      return;
-    }
-    
-    const { chatId } = req.params;
-    const io: Server = req.app.get('io');
-    
-    const chat = await ChatModel.findByIdAndUpdate(
-      chatId,
-      { open: true },
-      { new: true }
-    ).populate('customerId', '_id');
-    
-    if (!chat) {
-      res.status(404).json({ message: "Chat not found" });
-      return;
-    }
-    
-    // Notify via socket that chat has been reopened
-    io.to(`order-${chat.orderId}`).emit("chat-status-changed", {
-      chatId: chat._id,
-      orderId: chat.orderId,
-      status: "open",
-      timestamp: new Date()
-    });
-    
-    // Also notify user specifically
-    io.to(`user-${chat.customerId}`).emit("chat-status-changed", {
-      chatId: chat._id,
-      orderId: chat.orderId,
-      status: "open",
-      timestamp: new Date() 
-    });
-    
-    res.status(200).json({
-      message: "Chat reopened successfully",
-      chat
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to reopen chat" });
-  }
-};
-
-// Get unread message counts for the current user
-export const getUnreadCounts = async (req: Request, res: Response) => {
-  try {
-    const pipeline = [
-      {
-        $match: req.user.role === 'admin' 
-          ? {} // Admin can see all chats
-          : { customerId: new mongoose.Types.ObjectId(req.user._id) } // Users see only their chats
-      },
-      {
-        $project: {
-          _id: 1,
-          orderId: 1,
-          customerId: 1,
-          unreadCount: {
-            $size: {
-              $filter: {
-                input: "$messages",
-                as: "message",
-                cond: {
-                  $and: [
-                    { $eq: ["$$message.read", false] },
-                    req.user.role === 'admin'
-                      ? { $eq: ["$$message.senderRole", "user"] } // Admin sees unread from users
-                      : { $eq: ["$$message.senderRole", "admin"] } // Users see unread from admin
-                  ]
-                }
-              }
-            }
-          }
-        }
+    // Mark all messages from the other party as read
+    const senderType = req.user.role === "admin" ? "user" : "admin";
+    chat.messages.forEach(message => {
+      if (message.sender === senderType) {
+        message.read = true;
       }
-    ];
+    });
 
-    const unreadCounts = await ChatModel.aggregate(pipeline);
-    
-    // Calculate total unread
-    const totalUnread = unreadCounts.reduce((sum, chat) => sum + chat.unreadCount, 0);
-    
+    await chat.save();
+
     res.status(200).json({
-      totalUnread,
-      chatUnreadCounts: unreadCounts
+      message: "Messages marked as read",
+      chat
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Failed to fetch unread counts" });
+    res.status(500).json({ message: "Failed to mark messages as read" });
   }
 };
-
-// Helper function to find a user's socket ID
-function getUserSocketId(io: Server, userId: string): string | null {
-  let userSocketId = null;
-  
-  io.sockets.sockets.forEach((socket) => {
-    if (socket.data.user && socket.data.user.id.toString() === userId.toString()) {
-      userSocketId = socket.id;
-    }
-  });
-  
-  return userSocketId;
-}

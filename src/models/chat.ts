@@ -1,70 +1,88 @@
-import mongoose, { Document, Schema } from "mongoose";
 
-export interface ChatMessage {
-  [x: string]: any;
-  senderId: mongoose.Types.ObjectId;
-  senderRole: 'user' | 'admin';
-  message: string;
+import { model, Schema, Document } from "mongoose";
+import { ObjectId } from "mongodb";
+
+interface Attachment {
+  data: Buffer; 
+  contentType: string;
+  filename: string;
+  size: number;
+}
+
+interface Message {
+  _id: any;
+  sender: "user" | "admin" | "system";
+  content: string;
   timestamp: Date;
   read: boolean;
+  attachments?: Attachment[];
 }
 
-export interface ChatDocument extends Document {
-  orderId: mongoose.Types.ObjectId;
-  customerId: mongoose.Types.ObjectId;
-  messages: ChatMessage[];
-  lastMessage: Date;
-  open: boolean;
+interface IChat {
+  orderId: string;
+  customerId: string;
+  adminId?: string;
+  messages: Message[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const chatSchema = new Schema<ChatDocument>({
-  orderId: {
-    type: Schema.Types.ObjectId,
-    ref: 'Order',
-    required: true
+export interface ChatDocument extends IChat, Document {}
+
+const MessageSchema = new Schema<Message>({
+  sender: { 
+    type: String, 
+    enum: ["user", "admin", "system"],
+    required: true 
   },
-  customerId: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  content: { 
+    type: String, 
+    required: true,
+    trim: true 
   },
-  messages: [{
-    senderId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    senderRole: {
-      type: String,
-      enum: ['user', 'admin'],
-      required: true
-    },
-    message: {
-      type: String,
-      required: true
-    },
-    timestamp: {
-      type: Date,
-      default: Date.now
-    },
-    read: {
-      type: Boolean,
-      default: false
-    }
-  }],
-  lastMessage: {
-    type: Date,
-    default: Date.now
+  timestamp: { 
+    type: Date, 
+    default: Date.now 
   },
-  open: {
-    type: Boolean,
-    default: true
+  read: { 
+    type: Boolean, 
+    default: false 
   }
 });
 
+const ChatSchema = new Schema<ChatDocument>(
+  {
+    orderId: {
+      type: String,
+      required: true,
+      index: true
+    },
+    customerId: {
+      type: String,
+      required: true,
+      index: true
+    },
+    adminId: {
+      type: String,
+      index: true
+    },
+    messages: [MessageSchema]
+  },
+  { 
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
+);
 
-chatSchema.index({ orderId: 1 });
-chatSchema.index({ customerId: 1 });
-chatSchema.index({ lastMessage: -1 });
+// Virtual to get the last message
+ChatSchema.virtual('lastMessage').get(function(this: ChatDocument) {
+  if (this.messages.length === 0) return null;
+  return this.messages[this.messages.length - 1];
+});
 
-export default mongoose.model<ChatDocument>('Chat', chatSchema);
+// Index for faster querying
+ChatSchema.index({ orderId: 1, customerId: 1 });
+
+const ChatModel = model<ChatDocument>('Chat', ChatSchema);
+export default ChatModel;
