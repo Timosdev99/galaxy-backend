@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from "mongoose";
 
 export interface ChatMessage {
+  [x: string]: any;
   senderId: mongoose.Types.ObjectId;
   senderRole: 'user' | 'admin';
   message: string;

@@ -1,22 +1,23 @@
-import "dotenv/config"
-import connectDB from "../db"
-import express, { Application, Express } from "express"
-import userroute from "./route/userroute"
-import orderroute from "./route/orderroute"
-import { createServer } from "http"
-import cors from 'cors'
+import "dotenv/config";
+import connectDB from "../db";
+import express, { Application } from "express";
+import userroute from "./route/userroute";
+import orderroute from "./route/orderroute";
+import { createServer } from "http";
+import cors from 'cors';
 import chatRoutes from "./route/chatroute";
 import setupSocketServer from "./services/socketsever";
 
+const PORT = process.env.PORT || 3000;
+const app: Application = express();
+const httpServer = createServer(app);
 
-const PORT = process.env.PORT || 3000
-const app: Application = express()
-const httpServer = createServer(app)
+
 const io = setupSocketServer(httpServer);
+app.set('io', io); 
 
 
-app.use(express.json())
-
+app.use(express.json());
 
 const whitelist = [
   'http://localhost:3001',
@@ -40,19 +41,19 @@ const corsOptions = {
   exposedHeaders: ['Authorization']
 };
 
-
 app.use(cors(corsOptions));
 
-
+// Routes
 app.use('/user/v1', userroute);
-app.use('/order/v1', orderroute)
+app.use('/order/v1', orderroute);
 app.use("/chats/v1", chatRoutes);
 
-app.use('/', (req: any, res: any) => {
+app.use('/', (req, res) => {
   res.status(200).json({
     message: "API is working"
   });
 });
+
 
 connectDB()
   .then(() => {
@@ -64,6 +65,7 @@ connectDB()
     console.error('Failed to connect to database:', error);
     process.exit(1);
   });
+
 
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received');
