@@ -64,7 +64,7 @@ const OrderItemSchema = new Schema<OrderItem>({
 const PaymentSchema = new Schema<Payment>({
   method: { 
     type: String, 
-    enum: ["cash", "bank transfer", "credit", "debit", "paypal", "crypto"],
+    enum: ["E-transfer", "Shake Pay", "paypal"],
     required: true 
   },
   transactionId: { type: String },
