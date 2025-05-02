@@ -19,7 +19,7 @@ interface CreateOrderRequest {
   marketplace: "GalaxyService" | "studio43" | "NorthernEats";
   category: string;
   items: OrderItem[];
-  paymentMethod: "E-transfer" | "Shake Pay"  | "paypal"
+  paymentMethod: "E-transfer" | "Shake pay"  | "paypal"
   totalAmount: number;
   tax?: number;
   shippingCost?: number;

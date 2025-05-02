@@ -10,7 +10,7 @@ interface OrderItem {
 }
 
 interface Payment {
-  method: "E-transfer" | "Shake Pay"  | "paypal";
+  method: "E-transfer" | "Shake pay"  | "paypal";
   transactionId?: string;
   amount: number;
   currency: string;
@@ -64,7 +64,7 @@ const OrderItemSchema = new Schema<OrderItem>({
 const PaymentSchema = new Schema<Payment>({
   method: { 
     type: String, 
-    enum: ["E-transfer", "Shake Pay", "paypal"],
+    enum: ["E-transfer", "Shake pay", "paypal"],
     required: true 
   },
   transactionId: { type: String },
