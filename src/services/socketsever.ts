@@ -6,10 +6,28 @@ interface UserData {
   orderId?: string;
 }
 
+
+
+const whitelist = [
+  'http://localhost:3001',
+  'http://localhost:3002',  
+  'https://galaxy-gilt-iota.vercel.app',
+  'https://ghostmarket.net',
+  'https://www.ghostmarket.net',
+  'https://galaxy-admin-two.vercel.app',
+  'https://admin.ghostmarket.net'
+];
+
 export default function setupSocketServer(httpServer: any) {
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.WHITELISTED_DOMAINS?.split(",") || "*",
+      origin:function (origin: any, callback: any) {
+        if (!origin || whitelist.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
       methods: ["GET", "POST"]
     }
   });
