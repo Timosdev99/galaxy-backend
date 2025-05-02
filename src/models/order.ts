@@ -10,7 +10,7 @@ interface OrderItem {
 }
 
 interface Payment {
-  method: "cash" | "bank transfer" | "credit" | "debit" | "paypal" | "crypto";
+  method: "E-transfer" | "Shake Pay"  | "paypal";
   transactionId?: string;
   amount: number;
   currency: string;
