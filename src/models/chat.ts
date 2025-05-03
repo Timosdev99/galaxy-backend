@@ -1,16 +1,14 @@
-
-import { model, Schema, Document } from "mongoose";
-import { ObjectId } from "mongodb";
+import { model, Schema, Document, Types } from "mongoose";
 
 interface Attachment {
-  data: Buffer; 
+  data: Buffer;
   contentType: string;
   filename: string;
   size: number;
 }
 
 interface Message {
-  _id: any;
+  _id?: Types.ObjectId;
   sender: "user" | "admin" | "system";
   content: string;
   timestamp: Date;
@@ -28,6 +26,13 @@ interface IChat {
 }
 
 export interface ChatDocument extends IChat, Document {}
+
+const AttachmentSchema = new Schema({
+  data: { type: Buffer, required: true },
+  contentType: { type: String, required: true },
+  filename: { type: String, required: true },
+  size: { type: Number, required: true }
+});
 
 const MessageSchema = new Schema<Message>({
   sender: { 
@@ -47,7 +52,8 @@ const MessageSchema = new Schema<Message>({
   read: { 
     type: Boolean, 
     default: false 
-  }
+  },
+  attachments: [AttachmentSchema]
 });
 
 const ChatSchema = new Schema<ChatDocument>(
@@ -75,14 +81,12 @@ const ChatSchema = new Schema<ChatDocument>(
   }
 );
 
-// Virtual to get the last message
 ChatSchema.virtual('lastMessage').get(function(this: ChatDocument) {
-  if (this.messages.length === 0) return null;
-  return this.messages[this.messages.length - 1];
+  return this.messages.length > 0 ? this.messages[this.messages.length - 1] : null;
 });
 
-// Index for faster querying
 ChatSchema.index({ orderId: 1, customerId: 1 });
+ChatSchema.index({ updatedAt: -1 });
 
 const ChatModel = model<ChatDocument>('Chat', ChatSchema);
 export default ChatModel;

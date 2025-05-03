@@ -6,8 +6,6 @@ interface UserData {
   orderId?: string;
 }
 
-
-
 const whitelist = [
   'http://localhost:3001',
   'http://localhost:3002',  
@@ -21,110 +19,93 @@ const whitelist = [
 export default function setupSocketServer(httpServer: any) {
   const io = new Server(httpServer, {
     cors: {
-      origin:function (origin: any, callback: any) {
+      origin: (origin: any, callback: any) => {
         if (!origin || whitelist.includes(origin)) {
           callback(null, true);
         } else {
           callback(new Error('Not allowed by CORS'));
         }
       },
-      methods: ["GET", "POST"]
-    }
+      methods: ["GET", "POST"],
+      credentials: true
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000
   });
 
- 
-  const connectedUsers = new Map<string, Socket>(); 
-  const connectedAdmins = new Set<Socket>(); 
+  const userSockets = new Map<string, Socket>();
+  const adminSockets = new Set<Socket>();
 
   io.on("connection", (socket: Socket) => {
     console.log("New client connected");
 
-   
     socket.on("authenticate", (data: UserData) => {
       const { userId, role, orderId } = data;
-
-      
-      if (role === "admin") {
-        connectedAdmins.add(socket);
-        console.log(`Admin connected: ${userId}`);
-      } else {
-        connectedUsers.set(userId, socket);
-        console.log(`User connected: ${userId}`);
-        
-       
-        if (orderId) {
-          socket.join(`order-${orderId}`);
-          console.log(`User ${userId} joined order chat ${orderId}`);
-        }
+      if (!userId || !role) {
+        socket.emit("error", "Missing user data");
+        return;
       }
 
-      
       socket.data = { userId, role, orderId };
+
+      if (orderId) {
+        socket.join(`order-${orderId}`);
+        console.log(`User ${userId} joined order room ${orderId}`);
+      }
+
+      if (role === "admin") {
+        adminSockets.add(socket);
+        console.log(`Admin connected: ${userId}`);
+      } else {
+        userSockets.set(userId, socket);
+        console.log(`User connected: ${userId}`);
+      }
     });
 
-    
-    socket.on("new-message", (data: {
-      orderId: string;
-      content: string;
-      receiverId?: string; 
-    }) => {
+    socket.on("new-message", (data: { orderId: string; content: string }) => {
       const senderData = socket.data as UserData;
-      const { orderId, content, receiverId } = data;
-
       if (!senderData.userId || !senderData.role) {
         return socket.emit("error", "Not authenticated");
       }
 
-      // User sending to admins
-      if (senderData.role === "user") {
-        // Broadcast to all admins in the order room
-        io.to(`order-${orderId}`).emit("new-message", {
-          orderId,
-          senderId: senderData.userId,
-          content,
-          timestamp: new Date()
-        });
-        
-        // Also notify specific admin if assigned
-        if (receiverId && connectedUsers.has(receiverId)) {
-          connectedUsers.get(receiverId)?.emit("new-message", {
-            orderId,
-            senderId: senderData.userId,
-            content,
-            timestamp: new Date()
-          });
-        }
-      }
-      // Admin sending to user
-      else if (senderData.role === "admin" && receiverId) {
-        if (connectedUsers.has(receiverId)) {
-          connectedUsers.get(receiverId)?.emit("new-message", {
-            orderId,
-            senderId: senderData.userId,
-            content,
-            timestamp: new Date()
-          });
-        }
-      }
+      const { orderId, content } = data;
+      io.to(`order-${orderId}`).emit("new-message", {
+        orderId,
+        senderId: senderData.userId,
+        senderRole: senderData.role,
+        content,
+        timestamp: new Date()
+      });
     });
 
-    
     socket.on("typing", (data: { orderId: string, isTyping: boolean }) => {
       const senderData = socket.data as UserData;
+      if (!senderData.userId) return;
+
       io.to(`order-${data.orderId}`).emit("typing", {
         userId: senderData.userId,
         isTyping: data.isTyping
       });
     });
 
-    
+    socket.on("message-read", (data: { orderId: string; messageId: string }) => {
+      const senderData = socket.data as UserData;
+      io.to(`order-${data.orderId}`).emit("message-read", {
+        messageId: data.messageId,
+        readBy: senderData.userId,
+        readAt: new Date()
+      });
+    });
+
     socket.on("disconnect", () => {
       const userData = socket.data as UserData;
+      if (!userData?.userId) return;
+
       if (userData.role === "admin") {
-        connectedAdmins.delete(socket);
+        adminSockets.delete(socket);
         console.log(`Admin disconnected: ${userData.userId}`);
       } else {
-        connectedUsers.delete(userData.userId);
+        userSockets.delete(userData.userId);
         console.log(`User disconnected: ${userData.userId}`);
       }
     });
