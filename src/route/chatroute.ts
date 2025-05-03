@@ -18,8 +18,8 @@ router.get("/customer", authToken, getCustomerChats);
 router.get("/admin", authToken, getAdminChats);
 
 
-router.get("/order/:orderId", authToken, getChatByOrder);
-router.post("/send", authToken, sendMessage);
+router.get("/order/:orderId", getChatByOrder);
+router.post("/send", sendMessage);
 router.patch("/read/:orderId", authToken, markMessagesAsRead);
 router.get(
   "/:orderId/messages/:messageId/attachments/:attachmentIndex", 
