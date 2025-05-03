@@ -123,10 +123,10 @@ export const getChatByOrder = async (req: Request, res: Response) => {
     }
 
     // Check if user is customer or admin
-    // if ( order.customerId !== req.user.id) {
-    //   res.status(403).json({ message: "Unauthorized to access this chat" });
-    //   return;
-    // }
+    if ( order.customerId !== req.user.id) {
+      res.status(403).json({ message: "Unauthorized to access this chat" });
+      return;
+    }
 
     const chat = await ChatModel.findOne({ orderId });
     
@@ -165,10 +165,10 @@ export const sendMessage = async (req: Request, res: Response) => {
     }
 
     // Check if user is customer or admin
-    // if ( order.customerId !== req.user.id) {
-    //   res.status(403).json({ message: "Unauthorized to send message in this chat" });
-    //   return;
-    // }
+    if ( order.customerId !== req.user.id) {
+      res.status(403).json({ message: "Unauthorized to send message in this chat" });
+      return;
+    }
 
     // Find or create chat
     let chat = await ChatModel.findOne({ orderId });
