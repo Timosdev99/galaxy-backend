@@ -1,19 +1,32 @@
 import express from "express";
 import { 
-  getChatByOrder, 
+  getChatByOrder,
+  getChatById, 
   sendMessage, 
   sendMessageWithAttachment,
+  sendMessageToChatById,
   getCustomerChats, 
   getAdminChats,
   markMessagesAsRead, 
-  getAttachment
+  getAttachment,
+  createGeneralChat
 } from "../controllers/chat"; 
 import { authToken } from "../middlewares/auth";
 
 const router = express.Router();
 
+// General chat routes (independent of orders)
+router.post("/create", authToken, createGeneralChat);
+router.get("/:chatId", authToken, getChatById);
+router.post("/:chatId/message", authToken, sendMessageToChatById);
+router.patch("/:chatId/read", authToken, markMessagesAsRead);
+router.get("/:chatId/messages/:messageId/attachments/:attachmentIndex", authToken, getAttachment);
+
+// User and admin chat listing
 router.get("/customer", authToken, getCustomerChats);
 router.get("/admin", authToken, getAdminChats);
+
+// Legacy order-based chat routes
 router.get("/order/:orderId", authToken, getChatByOrder);
 router.post("/send", authToken, sendMessage);
 router.post("/send-with-attachment", authToken, sendMessageWithAttachment);

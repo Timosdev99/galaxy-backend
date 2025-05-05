@@ -4,6 +4,7 @@ interface UserData {
   userId: string;
   role: "user" | "admin";
   orderId?: string;
+  chatId?: string;
 }
 
 const whitelist = [
@@ -40,21 +41,30 @@ export default function setupSocketServer(httpServer: any) {
     console.log("New client connected");
 
     socket.on("authenticate", (data: UserData) => {
-      const { userId, role, orderId } = data;
+      const { userId, role, orderId, chatId } = data;
       if (!userId || !role) {
         socket.emit("error", "Missing user data");
         return;
       }
 
-      socket.data = { userId, role, orderId };
+      socket.data = { userId, role, orderId, chatId };
 
+      // Join order room if applicable
       if (orderId) {
         socket.join(`order-${orderId}`);
         console.log(`User ${userId} joined order room ${orderId}`);
       }
 
+      // Join chat room if applicable
+      if (chatId) {
+        socket.join(`chat-${chatId}`);
+        console.log(`User ${userId} joined chat room ${chatId}`);
+      }
+
       if (role === "admin") {
         adminSockets.add(socket);
+        // Admin joins a special room to receive notifications about new chats
+        socket.join('admin-room');
         console.log(`Admin connected: ${userId}`);
       } else {
         userSockets.set(userId, socket);
@@ -62,39 +72,99 @@ export default function setupSocketServer(httpServer: any) {
       }
     });
 
-    socket.on("new-message", (data: { orderId: string; content: string }) => {
+    socket.on("join-chat", (data: { chatId: string }) => {
+      const userData = socket.data as UserData;
+      if (!userData.userId) {
+        return socket.emit("error", "Not authenticated");
+      }
+
+      socket.join(`chat-${data.chatId}`);
+      console.log(`User ${userData.userId} joined chat room ${data.chatId}`);
+    });
+
+    socket.on("leave-chat", (data: { chatId: string }) => {
+      socket.leave(`chat-${data.chatId}`);
+      const userData = socket.data as UserData;
+      console.log(`User ${userData?.userId} left chat room ${data.chatId}`);
+    });
+
+    socket.on("new-message", (data: { 
+      chatId?: string;
+      orderId?: string;
+      content: string;
+    }) => {
       const senderData = socket.data as UserData;
       if (!senderData.userId || !senderData.role) {
         return socket.emit("error", "Not authenticated");
       }
 
-      const { orderId, content } = data;
-      io.to(`order-${orderId}`).emit("new-message", {
-        orderId,
-        senderId: senderData.userId,
-        senderRole: senderData.role,
-        content,
-        timestamp: new Date()
-      });
+      const { chatId, orderId, content } = data;
+      
+      // For order chats
+      if (orderId) {
+        io.to(`order-${orderId}`).emit("new-message", {
+          orderId,
+          senderId: senderData.userId,
+          senderRole: senderData.role,
+          content,
+          timestamp: new Date()
+        });
+      } 
+      // For general chats
+      else if (chatId) {
+        io.to(`chat-${chatId}`).emit("new-message", {
+          chatId,
+          senderId: senderData.userId,
+          senderRole: senderData.role,
+          content,
+          timestamp: new Date()
+        });
+      }
     });
 
-    socket.on("typing", (data: { orderId: string, isTyping: boolean }) => {
+    socket.on("typing", (data: { chatId?: string, orderId?: string, isTyping: boolean }) => {
       const senderData = socket.data as UserData;
       if (!senderData.userId) return;
 
-      io.to(`order-${data.orderId}`).emit("typing", {
-        userId: senderData.userId,
-        isTyping: data.isTyping
-      });
+      // For order chats
+      if (data.orderId) {
+        io.to(`order-${data.orderId}`).emit("typing", {
+          userId: senderData.userId,
+          isTyping: data.isTyping
+        });
+      } 
+      // For general chats
+      else if (data.chatId) {
+        io.to(`chat-${data.chatId}`).emit("typing", {
+          userId: senderData.userId,
+          isTyping: data.isTyping
+        });
+      }
     });
 
-    socket.on("message-read", (data: { orderId: string; messageId: string }) => {
+    socket.on("message-read", (data: { 
+      chatId?: string;
+      orderId?: string;
+      messageId: string;
+    }) => {
       const senderData = socket.data as UserData;
-      io.to(`order-${data.orderId}`).emit("message-read", {
-        messageId: data.messageId,
-        readBy: senderData.userId,
-        readAt: new Date()
-      });
+      
+      // For order chats
+      if (data.orderId) {
+        io.to(`order-${data.orderId}`).emit("message-read", {
+          messageId: data.messageId,
+          readBy: senderData.userId,
+          readAt: new Date()
+        });
+      } 
+      // For general chats
+      else if (data.chatId) {
+        io.to(`chat-${data.chatId}`).emit("message-read", {
+          messageId: data.messageId,
+          readBy: senderData.userId,
+          readAt: new Date()
+        });
+      }
     });
 
     socket.on("disconnect", () => {
@@ -112,4 +182,4 @@ export default function setupSocketServer(httpServer: any) {
   });
 
   return io;
-}
+};

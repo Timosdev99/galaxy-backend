@@ -17,9 +17,11 @@ interface Message {
 }
 
 interface IChat {
-  orderId: string;
+  orderId?: string; 
   customerId: string;
   adminId?: string;
+  subject?: string; 
+  isOrderChat: boolean; 
   messages: Message[];
   createdAt: Date;
   updatedAt: Date;
@@ -60,7 +62,6 @@ const ChatSchema = new Schema<ChatDocument>(
   {
     orderId: {
       type: String,
-      required: true,
       index: true
     },
     customerId: {
@@ -71,6 +72,15 @@ const ChatSchema = new Schema<ChatDocument>(
     adminId: {
       type: String,
       index: true
+    },
+    subject: {
+      type: String,
+      trim: true
+    },
+    isOrderChat: {
+      type: Boolean,
+      default: false,
+      required: true
     },
     messages: [MessageSchema]
   },
@@ -85,8 +95,12 @@ ChatSchema.virtual('lastMessage').get(function(this: ChatDocument) {
   return this.messages.length > 0 ? this.messages[this.messages.length - 1] : null;
 });
 
+// Index for order chats
 ChatSchema.index({ orderId: 1, customerId: 1 });
+// Index for ordering by last update
 ChatSchema.index({ updatedAt: -1 });
+// Index for general chats
+ChatSchema.index({ isOrderChat: 1, customerId: 1 });
 
 const ChatModel = model<ChatDocument>('Chat', ChatSchema);
 export default ChatModel;
