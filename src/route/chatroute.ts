@@ -15,6 +15,11 @@ import { authToken } from "../middlewares/auth";
 
 const router = express.Router();
 
+
+// User and admin chat listing
+router.get("/list", authToken, getCustomerChats);
+router.get("/admin", authToken, getAdminChats);
+
 // General chat routes (independent of orders)
 router.post("/create", authToken, createGeneralChat);
 router.get("/:chatId", authToken, getChatById);
@@ -22,9 +27,7 @@ router.post("/:chatId/message", authToken, sendMessageToChatById);
 router.patch("/:chatId/read", authToken, markMessagesAsRead);
 router.get("/:chatId/messages/:messageId/attachments/:attachmentIndex", authToken, getAttachment);
 
-// User and admin chat listing
-router.get("/list", authToken, getCustomerChats);
-router.get("/admin", authToken, getAdminChats);
+
 
 // Legacy order-based chat routes
 router.get("/order/:orderId", authToken, getChatByOrder);
