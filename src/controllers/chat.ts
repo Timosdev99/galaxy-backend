@@ -56,8 +56,8 @@ export const createGeneralChat = async (req: Request, res: Response): Promise<vo
     const { subject, message } = req.body;
     
     if (!message) {
-      res.status(400).json({ message: "Initial message is required" });
-      return;
+     res.status(400).json({ message: "Initial message is required" });
+     return
     }
 
     const newChat = new ChatModel({
@@ -68,20 +68,7 @@ export const createGeneralChat = async (req: Request, res: Response): Promise<vo
     });
 
     await newChat.save();
-
-    // Notify admins about new chat
-    const io = req.app.get('io');
-    io?.to('admin-room').emit('new-chat', {
-      chatId: newChat._id,
-      customerId: newChat.customerId,
-      subject: newChat.subject,
-      timestamp: new Date()
-    });
-
-    res.status(201).json({ 
-      message: "Chat created successfully", 
-      chat: newChat 
-    });
+    res.status(201).json({ chat: newChat });
   } catch (error) {
     console.error("Error in createGeneralChat:", error);
     res.status(500).json({ 

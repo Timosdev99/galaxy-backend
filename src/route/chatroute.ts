@@ -23,7 +23,7 @@ router.patch("/:chatId/read", authToken, markMessagesAsRead);
 router.get("/:chatId/messages/:messageId/attachments/:attachmentIndex", authToken, getAttachment);
 
 // User and admin chat listing
-router.get("/customer", authToken, getCustomerChats);
+router.get("/list", authToken, getCustomerChats);
 router.get("/admin", authToken, getAdminChats);
 
 // Legacy order-based chat routes
