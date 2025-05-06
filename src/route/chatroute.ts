@@ -12,13 +12,14 @@ import {
   createGeneralChat
 } from "../controllers/chat"; 
 import { authToken } from "../middlewares/auth";
+import { Admin } from '../middlewares/rbac';
 
 const router = express.Router();
 
 
 // User and admin chat listing
 router.get("/list", authToken, getCustomerChats);
-router.get("/admin", authToken, getAdminChats);
+router.get("/admin", authToken, Admin, getAdminChats);
 
 // General chat routes (independent of orders)
 router.post("/create", authToken, createGeneralChat);
