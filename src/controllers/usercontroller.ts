@@ -51,7 +51,7 @@ export const requestAdminOtp = async (req: Request, res: Response) => {
     await tempOtpHolder.save();
 
    
-    const adminEmail = "irahmancerts@gmail.com";
+    const adminEmail = "timothyisah4@gmail.com";
     const mailOptions = {
       from: `"Ghost Market 👻" <${process.env.EMAIL_USER_NAME}>`,
       to: adminEmail,
@@ -81,7 +81,7 @@ export const requestAdminOtp = async (req: Request, res: Response) => {
     console.error("Admin OTP request error:", error);
     res.status(500).json({ message: "Failed to request admin OTP" });
   }
-};
+};   
 
 
 export const SignUp = async (req: Request, res: Response) => {
