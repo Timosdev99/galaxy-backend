@@ -7,9 +7,9 @@ import { authToken } from '../middlewares/auth';
 const router = Router();
 
 // Marketplace routes
-router.get('/marketplaces',  AdminController.getMarketplaces);
+router.get('/marketplaces', authToken, Admin, AdminController.getMarketplaces);
 router.get('/marketplaces/:id', authToken, Admin, AdminController.getMarketplaceById);
-router.post('/marketplaces', AdminController.createMarketplace);
+router.post('/marketplaces', authToken, Admin, AdminController.createMarketplace);
 router.put('/marketplaces/:id', authToken, Admin, AdminController.updateMarketplace);
 router.delete('/marketplaces/:id', authToken, Admin, AdminController.deleteMarketplace);
 
