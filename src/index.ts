@@ -3,6 +3,7 @@ import connectDB from "../db";
 import express, { Application } from "express";
 import userroute from "./route/userroute";
 import orderroute from "./route/orderroute";
+import adminrouter from "./route/admin"
 import { createServer } from "http";
 import cors from 'cors';
 import chatRoutes from "./route/chatroute";
@@ -47,7 +48,7 @@ app.use(cors(corsOptions));
 app.use('/user/v1', userroute);
 app.use('/order/v1', orderroute);
 app.use("/chats/v1", chatRoutes);
-
+app.use('/admin/v1', adminrouter);
 app.use('/', (req, res) => {
   res.status(200).json({
     message: "API is working"

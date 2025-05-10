@@ -2,7 +2,6 @@ import { model, Schema, Document } from "mongoose";
 import { ObjectId } from "mongodb";
 
 interface OrderItem {
-  productId: string;
   name: string;
   price: number;
   quantity: number;
@@ -10,7 +9,7 @@ interface OrderItem {
 }
 
 interface Payment {
-  method: "E-transfer" | "Shake pay"  | "paypal";
+  method: "E-transfer" | "Shake pay" | "paypal";
   transactionId?: string;
   amount: number;
   currency: string;
@@ -35,7 +34,10 @@ interface ShippingDetails {
 interface IOrder {
   orderNumber: string;
   customerId: string;
-  marketplace: "GalaxyService" | "studio43" | "NorthernEats";
+  marketplace: string; // Slug for easy reference
+  marketplaceId: Schema.Types.ObjectId; // Reference to Marketplace document
+  serviceId?: Schema.Types.ObjectId; // Reference to Service document
+  customFormData?: Record<string, string | number | boolean>;
   category: string;
   status: "pending" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
   items: OrderItem[];
@@ -57,7 +59,7 @@ export interface OrderDocument extends IOrder, Document {}
 const OrderItemSchema = new Schema<OrderItem>({
   name: { type: String, required: true },
   price: { type: Number, required: true },
-  quantity: { type: Number, required: true, min: 1 },
+  quantity: { type: Number, min: 1 },
   discount: { type: Number, default: 0 }
 });
 
@@ -65,15 +67,15 @@ const PaymentSchema = new Schema<Payment>({
   method: { 
     type: String, 
     enum: ["E-transfer", "Shake pay", "paypal"],
-    required: true 
+    required: true
   },
   transactionId: { type: String },
   amount: { type: Number, required: true },
-  currency: { type: String, required: true, default: "USD" },
+  currency: { type: String, default: "USD" },
   status: { 
     type: String, 
     enum: ["pending", "received", "completed", "failed", "refunded"],
-    required: true,
+   
     default: "pending"
   },
   processedAt: { type: Date },
@@ -85,7 +87,7 @@ const ShippingDetailsSchema = new Schema<ShippingDetails>({
   address: { type: String, required: true },
   city: { type: String, required: true },
   state: { type: String, required: true },
-  country: { type: String, required: true, default: "USA" },
+  country: { type: String, default: "Canada" },
   postalCode: { type: String, required: true },
   contactPhone: { type: String, required: true },
   trackingNumber: { type: String },
@@ -97,20 +99,29 @@ const OrderSchema = new Schema<OrderDocument>(
   {
     orderNumber: {
       type: String,
-      required: true,
+     
       unique: true,
       index: true
     },
-
     customerId: {
       type: String,
-      required: true,
+     
       index: true
     },
     marketplace: {
       type: String,
-      enum: ["GalaxyService", "studio43", "NorthernEats"],
-      required: true,
+     
+      index: true
+    },
+    marketplaceId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Marketplace',
+     
+      index: true
+    },
+    serviceId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Service',
       index: true
     },
     category: {
@@ -126,16 +137,19 @@ const OrderSchema = new Schema<OrderDocument>(
     items: [OrderItemSchema],
     totalAmount: {
       type: Number,
-      required: true
+    
     },
     tax: {
       type: Number,
-      required: true,
+     
       default: 0
     },
+    customFormData: {
+       type: Schema.Types.Mixed
+       },
     shippingCost: {
       type: Number,
-      required: true,
+     
       default: 0
     },
     discount: {
@@ -166,46 +180,72 @@ const OrderSchema = new Schema<OrderDocument>(
   },
   { 
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toJSON: { 
+      virtuals: true,
+      transform: function(doc, ret) {
+        delete ret.__v;
+        delete ret.marketplaceId;
+        delete ret.serviceId;
+        return ret;
+      }
+    },
+    toObject: { 
+      virtuals: true,
+      transform: function(doc, ret) {
+        delete ret.__v;
+        delete ret.marketplaceId;
+        delete ret.serviceId;
+        return ret;
+      }
+    }
   }
 );
 
-// Pre-save middleware to update lastUpdatedAt
-OrderSchema.pre<OrderDocument>('save', function(next) {
-  this.lastUpdatedAt = new Date();
-  next();
+// Virtual population for marketplace details
+OrderSchema.virtual('marketplaceDetails', {
+  ref: 'Marketplace',
+  localField: 'marketplaceId',
+  foreignField: '_id',
+  justOne: true
 });
 
-// Calculate final amount before saving
+// Virtual population for service details
+OrderSchema.virtual('serviceDetails', {
+  ref: 'Service',
+  localField: 'serviceId',
+  foreignField: '_id',
+  justOne: true
+});
+
+// Pre-save hooks
+// OrderSchema.pre<OrderDocument>('save', function(next) {
+//   this.lastUpdatedAt = new Date();
+  
+//   // Ensure marketplace slug matches the referenced marketplace
+//   if (this.isModified('marketplaceId') && this.populated('marketplaceId')) {
+//     this.marketplace = this.marketplaceId.slug;
+//   }
+  
+//   next();
+// });
+
 OrderSchema.pre<OrderDocument>('save', function(next) {
   this.finalAmount = this.totalAmount + this.tax + this.shippingCost - (this.discount || 0);
   next();
 });
 
-// Virtual property to check if order is eligible for refund
+// Virtual property for refund eligibility
 OrderSchema.virtual('isRefundEligible').get(function(this: OrderDocument) {
-  // Orders can be refunded within 30 days of delivery
   if (this.status !== 'delivered') return false;
-  
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
   return this.lastUpdatedAt > thirtyDaysAgo;
 });
 
-// Market-specific virtual properties
-OrderSchema.virtual('isDigitalService').get(function(this: OrderDocument) {
-  return this.marketplace === "GalaxyService";
-});
-
-OrderSchema.virtual('isPhysicalProduct').get(function(this: OrderDocument) {
-  return this.marketplace === "studio43";
-});
-
-OrderSchema.virtual('isFood').get(function(this: OrderDocument) {
-  return this.marketplace === "NorthernEats";
-});
+// Indexes for better query performance
+OrderSchema.index({ customerId: 1, status: 1 });
+OrderSchema.index({ marketplaceId: 1, status: 1 });
+OrderSchema.index({ 'payment.status': 1 });
 
 const OrderModel = model<OrderDocument>('Order', OrderSchema);
 export default OrderModel;

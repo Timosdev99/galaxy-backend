@@ -4,6 +4,8 @@ import mongoose from "mongoose";
 import sendmail from "../utils/mailer";
 import { SendMailOptions } from "nodemailer";
 import ChatModel from "../models/chat";
+import MarketplaceModel, { MarketplaceDocument } from "../models/marketplace";
+import ServiceModel from "../models/service";
 
 interface OrderItem {
   name: string;
@@ -16,7 +18,8 @@ interface CreateOrderRequest {
   customerId: string;
   username: string;
   email: string;
-  marketplace: "GalaxyService" | "studio43" | "NorthernEats";
+  marketplace: string;
+  customFormData?: Record<string, string | number | boolean>;
   category: string;
   items: OrderItem[];
   paymentMethod: "E-transfer" | "Shake pay"  | "paypal"
@@ -69,50 +72,79 @@ export const createOrder = async (req: Request<{}, {}, CreateOrderRequest>, res:
   try {
     const {
       customerId,
-      marketplace,
+      marketplace: marketplaceSlug,
       category,
       items,
       paymentMethod,
       totalAmount,
-      //tax = 0,
       shippingCost = 0,
-    //  discount = 0,
       shipping,
       notes
     } = req.body;
 
-    if (!customerId || !marketplace || !category || !items || items.length === 0 || !shipping || !paymentMethod || !totalAmount) {
-     res.status(400).json({
-        message: "Required fields missing: customerId, marketplace, category, items, payment method, totalAmount, and shipping details are required"
+    // Validate required fields
+    if (!customerId  || !items || items.length === 0 ||  !paymentMethod || totalAmount === undefined) {
+      res.status(400).json({
+        message: "Required fields missing: customerId, category, items, payment method, totalAmount, and shipping details are required"
       });
-      return 
+      return
     }
 
-    // validating if the item contains required feild 
+    // Validate items
     for (const item of items) {
-      if (!item.name || !item.price || !item.quantity) {
-        res.status(400).json({
-          message: "Each item must have  name, price, and quantity"
+      if (!item.name || item.price === undefined || item.quantity === undefined) {
+      res.status(400).json({
+          message: "Each item must have name, price, and quantity"
         });
-        return
+        return 
       }
     }
 
-    // calculating final amount 
-    const finalAmount = totalAmount  + shippingCost;
+    // Get marketplace with active check
+    const marketplace = await MarketplaceModel.findOne({ 
+      slug: marketplaceSlug,
+      active: true 
+    });
+    
+    if (!marketplace) {
+      res.status(400).json({ 
+        message: "Invalid marketplace or marketplace is not active" 
+      });
+      return
+    }
 
-    // creating new orders 
+    // Validate service/category exists and is valid for this marketplace
+    const service = await ServiceModel.findOne({ 
+      marketplace: marketplace._id,
+      name: category,
+      active: true
+    });
+    
+    if (!service) {
+      res.status(400).json({ 
+        message: "Invalid category for this marketplace or category is not active" 
+      });
+      return
+    }
+
+    // Calculate final amount with service discount if applicable
+    const discountedTotal = applyServiceDiscount(items, service.discountPercentage);
+    const finalAmount = discountedTotal + (shippingCost || 0);
+
+    // Create new order
     const order = new OrderModel({
       orderNumber: generateOrderNumber(),
       customerId,
-      marketplace,
+      marketplace: marketplace.slug, // Store the slug for easy reference
+      marketplaceId: marketplace._id, // Store reference to marketplace document
       category,
       status: "pending",
-      items,
-      totalAmount,
-     // tax,
+      items: items.map(item => ({
+        ...item,
+        discount: (item.price * item.quantity) * (service.discountPercentage / 100)
+      })),
+      totalAmount: discountedTotal,
       shippingCost,
-      //discount,
       finalAmount,
       placedAt: new Date(),
       payment: {
@@ -123,69 +155,106 @@ export const createOrder = async (req: Request<{}, {}, CreateOrderRequest>, res:
       },
       shipping,
       notes,
-      lastUpdatedAt: new Date()
+      lastUpdatedAt: new Date(),
+      serviceId: service._id ,// Store reference to service document
+      customFormData: req.body.customFormData,
     });
 
-    await order.save();
-
-    const chat = new ChatModel({
-      orderId: order.id.toString(),
-      customerId: customerId,
-      messages: [{
-        sender: "system",
-        content: `Chat started for order #${order.orderNumber}`,
-        timestamp: new Date(),
-        read: true
-      }]
-    });
+    // Save order and create chat in transaction
+    const session = await mongoose.startSession();
+    session.startTransaction();
     
-    await chat.save();
-    
-    // Notify admin via socket.io if you're using it
-    const io = req.app.get('io');
-    if (io) {
-      io.emit('new-chat', { 
-        orderId: order._id,
-        customerId: customerId,
-        orderNumber: order.orderNumber 
+    try {
+      const savedOrder = await order.save({ session });
+      
+      const chat = new ChatModel({
+        orderId: savedOrder._id,
+        customerId,
+        messages: [{
+          sender: "system",
+          content: `Chat started for order #${savedOrder.orderNumber}`,
+          timestamp: new Date(),
+          read: true
+        }]
       });
+      
+      await chat.save({ session });
+      await session.commitTransaction();
+      
+      // Notify via socket.io if available
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('new-chat', { 
+          orderId: savedOrder._id,
+          customerId,
+          orderNumber: savedOrder.orderNumber,
+          marketplace: marketplace.slug
+        });
+      }
+      
+      // Send confirmation email
+      await sendOrderConfirmationEmail(req.user.email, savedOrder.orderNumber, finalAmount, marketplace);
+
+      res.status(201).json({
+        message: "Order successfully created",
+        order: savedOrder
+      });
+      return 
+      
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
     }
-    
-    
-    const orderConfirmationMail = (to: string, orderNumber: string, finalAmount: number): SendMailOptions => ({
-      from: `"Ghost Market 👻" <${process.env.EMAIL_USER_NAME}>`,
-      to,
-      subject: `🎉 Your Ghost Market Order #${orderNumber} is Confirmed!`,
-      html: `
-        <div style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
-          <h2 style="color: #222;">Thank you for your order! 👻</h2>
-          <p>Hello!</p>
-          <p>Your order <strong>#${orderNumber}</strong> has been successfully placed on <strong>Ghost Market</strong>.</p>
-          <p><strong>Total Amount:</strong> $${finalAmount}</p>
-          <p>We’re currently processing your order and will notify you once it’s ready for shipping.</p>
-          <p>Thank you for shopping with us!</p>
-          <p style="margin-top: 30px;">– The Ghost Market Team 👻</p>
-          <hr style="margin: 40px 0;" />
-          <small style="color: #888;">You received this email because you placed an order on Ghost Market.</small>
-        </div>
-      `
-    });
 
-    await sendmail(orderConfirmationMail(req.user.email, order.orderNumber, order.finalAmount));
-
-    
- res.status(201).json({
-      message: "Order successfully created",
-      order
+  } catch (error: any) {
+    console.error("Order creation failed:", error);
+  res.status(500).json({ 
+      message: "Failed to create order",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
-       
     return 
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to create order" });
-    return
   }
 };
+
+// Helper function to apply service discount
+function applyServiceDiscount(items: OrderItem[], discountPercentage: number): number {
+  return items.reduce((sum, item) => {
+    const itemTotal = item.price * item.quantity;
+    const discountAmount = itemTotal * (discountPercentage / 100);
+    return sum + (itemTotal - discountAmount);
+  }, 0);
+}
+
+// Helper function for sending confirmation email
+async function sendOrderConfirmationEmail(
+  to: string, 
+  orderNumber: string, 
+  amount: number,
+  marketplace: MarketplaceDocument
+): Promise<void> {
+  const mailOptions: SendMailOptions = {
+    from: `"${marketplace.name} 👻" <${process.env.EMAIL_USER_NAME}>`,
+    to,
+    subject: `🎉 Your ${marketplace.name} Order #${orderNumber} is Confirmed!`,
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
+        <h2 style="color: ${marketplace.colorScheme.primary};">Thank you for your order! 👻</h2>
+        <p>Hello!</p>
+        <p>Your order <strong>#${orderNumber}</strong> has been successfully placed on <strong>${marketplace.name}</strong>.</p>
+        <p><strong>Total Amount:</strong> $${amount.toFixed(2)}</p>
+        <p>We're currently processing your order and will notify you once it's ready.</p>
+        <p>Thank you for shopping with us!</p>
+        <p style="margin-top: 30px;">– The ${marketplace.name} Team 👻</p>
+        <hr style="margin: 40px 0;" />
+        <small style="color: #888;">You received this email because you placed an order on ${marketplace.name}.</small>
+      </div>
+    `
+  };
+
+  await sendmail(mailOptions);
+}
 
 export const getAllOrders = async(req: Request, res: Response) => {
   try {
@@ -660,5 +729,37 @@ export const getOrdersByCustomerId = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to get orders by customer ID" });
+  }
+};
+
+
+export const getMarketplaceData = async (req: Request, res: Response) => {
+  try {
+    const marketplaces = await MarketplaceModel.find({ active: true });
+    const services = await ServiceModel.find({ active: true }).populate<{ marketplace: MarketplaceDocument }>('marketplace');
+    
+    const marketplaceData = marketplaces.map((mp: MarketplaceDocument) => ({
+      id: mp._id,
+      name: mp.name,
+      slug: mp.slug,
+      description: mp.description,
+      icon: mp.icon,
+      colorScheme: mp.colorScheme,
+      services: services
+        .filter(s => s.marketplace._id.equals(mp._id))
+        .map(s => ({
+          name: s.name,
+          description: s.description,
+          discountPercentage: s.discountPercentage,
+          orderFormFields: s.orderFormFields
+        }))
+    }));
+
+    res.status(200).json({
+      marketplaces: marketplaceData
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to fetch marketplace data" });
   }
 };

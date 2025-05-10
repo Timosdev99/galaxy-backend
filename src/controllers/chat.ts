@@ -442,3 +442,4 @@ export const markMessagesAsRead = async (req: Request, res: Response): Promise<v
     });
   }
 };
+
