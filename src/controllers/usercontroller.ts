@@ -51,7 +51,7 @@ export const requestAdminOtp = async (req: Request, res: Response) => {
     await tempOtpHolder.save();
 
    
-    const adminEmail = "timothyisah4@gmail.com";
+    const adminEmail = "irahmancerts@gmail.com";
     const mailOptions = {
       from: `"Ghost Market 👻" <${process.env.EMAIL_USER_NAME}>`,
       to: adminEmail,
