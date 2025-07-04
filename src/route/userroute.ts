@@ -12,4 +12,4 @@ router.post("/logout", logout)
 router.get("/getuser/:id", authToken, getUser)
 router.get("/alluser", authToken,Admin, allUser)
 router.get("/validate-token", authToken, validateToken)
-export default router
+export default router  

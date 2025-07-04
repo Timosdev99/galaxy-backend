@@ -14,7 +14,7 @@ export const getMarketplaces = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Failed to fetch marketplaces" });
+    res.status(500).json({ message: "Failed to fetch marketplaces" });  
   }
 };
 

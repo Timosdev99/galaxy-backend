@@ -15,15 +15,16 @@ const httpServer = createServer(app);
 
 
 const io = setupSocketServer(httpServer);
-app.set('io', io); 
+app.set('io', io);
 
 
 app.use(express.json());
 
 const whitelist = [
   'http://localhost:3001',
-  'http://localhost:3002',  
+  'http://localhost:3002',
   'https://galaxy-gilt-iota.vercel.app',
+  'https://galaxy-timosdev99s-projects.vercel.app',
   'https://ghostmarket.net',
   'https://www.ghostmarket.net',
   'https://galaxy-admin-two.vercel.app',
@@ -31,7 +32,7 @@ const whitelist = [
 ];
 
 const corsOptions = {
-  origin: function (origin: any, callback: any) {
+  origin: function(origin: any, callback: any) {
     if (!origin || whitelist.includes(origin)) {
       callback(null, true);
     } else {
