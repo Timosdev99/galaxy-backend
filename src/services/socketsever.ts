@@ -9,8 +9,9 @@ interface UserData {
 
 const whitelist = [
   'http://localhost:3001',
-  'http://localhost:3002',  
+  'http://localhost:3002',
   'https://galaxy-gilt-iota.vercel.app',
+  'https://galaxy-timosdev99s-projects-vercel.app',
   'https://ghostmarket.net',
   'https://www.ghostmarket.net',
   'https://galaxy-admin-two.vercel.app',
@@ -88,7 +89,7 @@ export default function setupSocketServer(httpServer: any) {
       console.log(`User ${userData?.userId} left chat room ${data.chatId}`);
     });
 
-    socket.on("new-message", (data: { 
+    socket.on("new-message", (data: {
       chatId?: string;
       orderId?: string;
       content: string;
@@ -99,7 +100,7 @@ export default function setupSocketServer(httpServer: any) {
       }
 
       const { chatId, orderId, content } = data;
-      
+
       // For order chats
       if (orderId) {
         io.to(`order-${orderId}`).emit("new-message", {
@@ -109,7 +110,7 @@ export default function setupSocketServer(httpServer: any) {
           content,
           timestamp: new Date()
         });
-      } 
+      }
       // For general chats
       else if (chatId) {
         io.to(`chat-${chatId}`).emit("new-message", {
@@ -132,7 +133,7 @@ export default function setupSocketServer(httpServer: any) {
           userId: senderData.userId,
           isTyping: data.isTyping
         });
-      } 
+      }
       // For general chats
       else if (data.chatId) {
         io.to(`chat-${data.chatId}`).emit("typing", {
@@ -142,13 +143,13 @@ export default function setupSocketServer(httpServer: any) {
       }
     });
 
-    socket.on("message-read", (data: { 
+    socket.on("message-read", (data: {
       chatId?: string;
       orderId?: string;
       messageId: string;
     }) => {
       const senderData = socket.data as UserData;
-      
+
       // For order chats
       if (data.orderId) {
         io.to(`order-${data.orderId}`).emit("message-read", {
@@ -156,7 +157,7 @@ export default function setupSocketServer(httpServer: any) {
           readBy: senderData.userId,
           readAt: new Date()
         });
-      } 
+      }
       // For general chats
       else if (data.chatId) {
         io.to(`chat-${data.chatId}`).emit("message-read", {
